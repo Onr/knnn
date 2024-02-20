@@ -78,17 +78,17 @@ def test_knn_vs_knnn_on_iris_data():
     data_test = dataset['data'].iloc[random_idx_s[-test_sample_num:]].to_numpy()
     gt_test_s = dataset['target'].iloc[random_idx_s[-test_sample_num:]].to_numpy()
     knnn_configs = {
-        "number_of_neighbors": 30, # 3
-        "number_of_neighbors_of_neighbors": 10, # 15
-        "set_size": -1,  # 2
+        "number_of_neighbors": 5, 
+        "number_of_neighbors_of_neighbors": 25, 
+        "set_size": -1,  
     }
     knnn_class = KNNN_class(number_of_classes=number_of_classes ,**knnn_configs)
     knnn_class.fit(embedding=data_train, gt=gt_train_s)
-    knnn_res, knn_res = knnn_class(data_test, return_nearest_neigbours_results=True)
+    _, _, knnn_results_by_class_bin, knn_results_by_class_bin = knnn_class(data_test, return_nearest_neigbours_results=True)
     
     # compere scores
-    roc_auc_score_knn = roc_auc_score(gt_test_s, knn_res, multi_class='ovr')
-    roc_auc_score_knnn = roc_auc_score(gt_test_s, knnn_res, multi_class='ovr')
+    roc_auc_score_knn = roc_auc_score(gt_test_s, knn_results_by_class_bin, multi_class='ovr')
+    roc_auc_score_knnn = roc_auc_score(gt_test_s, knnn_results_by_class_bin, multi_class='ovr')
 
     # document results
     results_dict = {
@@ -117,17 +117,18 @@ def test_knn_vs_knnn_on_digits_data():
     data_test = dataset['data'].iloc[random_idx_s[-test_sample_num:]].to_numpy()
     gt_test_s = dataset['target'].iloc[random_idx_s[-test_sample_num:]].to_numpy()
     knnn_configs = {
-        # "number_of_neighbors": 100, # 3
-        # "number_of_neighbors_of_neighbors": 25, # 15
-        "set_size": 3  # 2
+        # # "number_of_neighbors": 3, # 3
+        # "number_of_neighbors_of_neighbors": 2, # 15
+        # "set_size": 2,  # 2
+        "distance_function": 'cosine', # 'cosine', 'euclidean'
     }
     knnn_class = KNNN_class(number_of_classes=number_of_classes ,**knnn_configs)
     knnn_class.fit(embedding=data_train, gt=gt_train_s)
-    knnn_res, knn_res = knnn_class(data_test, return_nearest_neigbours_results=True)
+    _, _, knnn_results_by_class_bin, knn_results_by_class_bin  = knnn_class(data_test, return_nearest_neigbours_results=True)
     
     # compere scores
-    roc_auc_score_knn = roc_auc_score(gt_test_s, knn_res, multi_class='ovr')
-    roc_auc_score_knnn = roc_auc_score(gt_test_s, knnn_res, multi_class='ovr')
+    roc_auc_score_knn = roc_auc_score(gt_test_s, knn_results_by_class_bin, multi_class='ovr')
+    roc_auc_score_knnn = roc_auc_score(gt_test_s, knnn_results_by_class_bin, multi_class='ovr')
 
     # document results
     results_dict = {
@@ -163,11 +164,11 @@ def test_knn_vs_knnn_on_wine_data():
     }
     knnn_class = KNNN_class(number_of_classes=number_of_classes ,**knnn_configs)
     knnn_class.fit(embedding=data_train, gt=gt_train_s)
-    knnn_res, knn_res = knnn_class(data_test, return_nearest_neigbours_results=True)
+    _, _, knnn_results_by_class_bin, knn_results_by_class_bin = knnn_class(data_test, return_nearest_neigbours_results=True)
     
     # compere scores
-    roc_auc_score_knn = roc_auc_score(gt_test_s, knn_res, multi_class='ovr')
-    roc_auc_score_knnn = roc_auc_score(gt_test_s, knnn_res, multi_class='ovr')
+    roc_auc_score_knn = roc_auc_score(gt_test_s, knn_results_by_class_bin, multi_class='ovr')
+    roc_auc_score_knnn = roc_auc_score(gt_test_s, knnn_results_by_class_bin, multi_class='ovr')
 
     # document results
     results_dict = {
@@ -207,10 +208,9 @@ def test_knn_vs_knnn_on_inria_bioresponse(): # https://huggingface.co/datasets/i
     data_test = dataset_test.to_numpy()  
     # run knnn and knn
     knnn_configs = {
-        "number_of_neighbors": 3, # 3
-        "number_of_neighbors_of_neighbors": 15,
+        # "number_of_neighbors": 3, # 3
+        # "number_of_neighbors_of_neighbors": 15,
         "set_size": 4,  # 2
-        # "set_size": 10,  # 2
     }
     # TODO tmp chnage
     # make sure that the number of features is divisible by the set size
@@ -220,13 +220,13 @@ def test_knn_vs_knnn_on_inria_bioresponse(): # https://huggingface.co/datasets/i
         data_test = np.concatenate([data_test, 1e-5 * np.random.randn(data_test.shape[0], num_of_features_to_add)], axis=1)
     knnn_class = KNNN_class(number_of_classes=number_of_classes ,**knnn_configs)
     knnn_class.fit(embedding=data_train, gt=gt_train_s)
-    knnn_res, knn_res = knnn_class(data_test, return_nearest_neigbours_results=True)
+    knnn_res, knn_res, _, _ = knnn_class(data_test, return_nearest_neigbours_results=True)
 
     # compere scores
-    roc_auc_score_knn = roc_auc_score(gt_test_s, knn_res[:, 1])
-    roc_auc_score_knnn = roc_auc_score(gt_test_s, knnn_res[:, 1])
-    average_precision_score_knn = average_precision_score(gt_test_s, knn_res[:, 1])
-    average_precision_score_knnn = average_precision_score(gt_test_s, knnn_res[:, 1])
+    roc_auc_score_knn = roc_auc_score(gt_test_s, -knn_res[:, 1])
+    roc_auc_score_knnn = roc_auc_score(gt_test_s, -knnn_res[:, 1])
+    average_precision_score_knn = average_precision_score(gt_test_s, -knn_res[:, 1])
+    average_precision_score_knnn = average_precision_score(gt_test_s, -knnn_res[:, 1])
 
     # document results
     results_dict = {
@@ -274,19 +274,19 @@ def test_knn_vs_knnn_on_inria_soda_eye(): # https://huggingface.co/datasets/inri
     data_test = dataset_test.to_numpy()  
     # run knnn and knn
     knnn_configs = {
-        "number_of_neighbors": 5,
-        "number_of_neighbors_of_neighbors": 40,
-        "set_size": 5,
+        # "number_of_neighbors": 1,
+        "number_of_neighbors_of_neighbors": 1500, 
+        "set_size": -1,
     }
     knnn_class = KNNN_class(number_of_classes=number_of_classes ,**knnn_configs)
     knnn_class.fit(embedding=data_train, gt=gt_train_s)
-    knnn_res, knn_res = knnn_class(data_test, return_nearest_neigbours_results=True)
+    knnn_res, knn_res, _, _ = knnn_class(data_test, return_nearest_neigbours_results=True)
 
     # compere scores
-    roc_auc_score_knn = roc_auc_score(gt_test_s, knn_res[:, 1])
-    roc_auc_score_knnn = roc_auc_score(gt_test_s, knnn_res[:, 1])
-    average_precision_score_knn = average_precision_score(gt_test_s, knn_res[:, 1])
-    average_precision_score_knnn = average_precision_score(gt_test_s, knnn_res[:, 1])
+    roc_auc_score_knn = roc_auc_score(gt_test_s, -knn_res[:, 1])
+    roc_auc_score_knnn = roc_auc_score(gt_test_s, -knnn_res[:, 1])
+    average_precision_score_knn = average_precision_score(gt_test_s, -knn_res[:, 1])
+    average_precision_score_knnn = average_precision_score(gt_test_s, -knnn_res[:, 1])
     logging.info(f"Results on eye movements dataset (AUROC: knnn={roc_auc_score_knnn}, knn={roc_auc_score_knn})")
 
     # document results
@@ -324,7 +324,6 @@ def test_knn_vs_knnn_on_inria_soda_covertype(): # https://huggingface.co/dataset
     dataset_train = dataset_train.iloc[:train_sample_num]
     dataset_test = dataset_covertype_filtered.iloc[shuffled_indexes[-test_sample_num:]]
 
-    # dataset_train = dataset_train[:1000] # TODO tmp remove this is for quicker debug
     gt_train_s = dataset_train['class'].to_numpy() - 1 # class 1 is 0 in python
     gt_test_s = dataset_test['class'].to_numpy() - 1 # class 1 is 0 in python
     number_of_classes = len(np.unique(gt_train_s))
@@ -335,88 +334,22 @@ def test_knn_vs_knnn_on_inria_soda_covertype(): # https://huggingface.co/dataset
     data_train = dataset_train.to_numpy()
     data_test = dataset_test.to_numpy()  
 
-    # print('tmp')
-    # print('tmp')
-    # # remove columns 
-    # leave_only = [-2,-1]
-    # data_train = data_train[:, leave_only]
-    # data_test = data_test[:, leave_only]
-    # # normalize data
-    # print('tmp')
-    # print('tmp')
 
     # run knnn and knn
     knnn_configs = {
-        # "number_of_neighbors": 100, # 15
-        # "number_of_neighbors_of_neighbors": 25, # 15
-        "set_size": 3,
-        # "do_reorder": False,
-        # 'do_knnn_range_limit': True,  
-        # 'do_knn_n_scale': True,  
-        # 'do_knn_and_knnn_weight': True,
-        # 'first_global_normalization': False,
-        # 'do_unit_sphere_normalization': True,
-
+        # "set_size": 3,
     }
     knnn_class = KNNN_class(number_of_classes=number_of_classes ,**knnn_configs)
     knnn_class.fit(embedding=data_train, gt=gt_train_s)
-    knnn_res, knn_res = knnn_class(data_test)
+    knnn_res, knn_res, _, _ = knnn_class(data_test)
 
     # compere scores
-    roc_auc_score_knn = roc_auc_score(gt_test_s, knn_res[:, 1])
-    roc_auc_score_knnn = roc_auc_score(gt_test_s, knnn_res[:, 1])
-    average_precision_score_knn = average_precision_score(gt_test_s, knn_res[:, 1])
-    average_precision_score_knnn = average_precision_score(gt_test_s, knnn_res[:, 1])
+    roc_auc_score_knn = roc_auc_score(gt_test_s, -knn_res[:, 1])
+    roc_auc_score_knnn = roc_auc_score(gt_test_s, -knnn_res[:, 1])
+    average_precision_score_knn = average_precision_score(gt_test_s, -knn_res[:, 1])
+    average_precision_score_knnn = average_precision_score(gt_test_s, -knnn_res[:, 1])
     logging.info(f"Results on covertypes dataset (AUROC: knnn={roc_auc_score_knnn}, knn={roc_auc_score_knn})")
     
-    # # plot roc curve
-    # import matplotlib.pyplot as plt
-    # import seaborn as sns
-    # roc_score_knn_fpr, roc_score_knn_tpr, _ = roc_curve(gt_test_s, knn_res[:, 1])
-    # roc_score_knnn_fpr, roc_score_knnn_tpr, _ = roc_curve(gt_test_s, knnn_res[:, 1])
-    # sns.lineplot(x=roc_score_knn_fpr, y=roc_score_knn_tpr, label=f'KNN (AUROC={roc_auc_score_knn})')
-    # sns.lineplot(x=roc_score_knnn_fpr, y=roc_score_knnn_tpr, label=f'KNNN (AUROC={roc_auc_score_knnn})')
-    # sns.lineplot(x=[0, 1], y=[0, 1], label='random')
-    # plt.xlabel('False Positive Rate')
-    # plt.ylabel('True Positive Rate')
-    # sns.set_theme()
-    # sns.set_style("whitegrid")
-    # sns.set_context("paper", font_scale=1.5, rc={"lines.linewidth": 2.5})
-    # sns.set_palette("colorblind")
-    # sns.set_style("ticks")
-    # plt.savefig('tmp.png')
-
-    # # plot the diff between knn and knnn
-    # plt.clf()
-    # # nn_nnn_diff = knn_res[:,1] - knnn_res[:,1]
-    # nn_nnn_diff = (knn_res[:,1] > 0.5) ^ (knnn_res[:,1] > 0.5)
-    # # sns.lineplot(x=range(nn_nnn_diff.shape[0]), y=nn_nnn_diff, label=f'KNN - KNNN')    
-    # sns.remove(nn_nnn_diff, label=f'KNN - KNNN')
-    # sns.set_theme()
-    # sns.set_style("whitegrid")
-    # sns.set_context("paper", font_scale=1.5, rc={"lines.linewidth": 2.5})
-    # sns.set_palette("colorblind")
-    # sns.set_style("ticks")
-    # sns.despine()
-    # plt.xlabel('KNN - KNNN')
-    # plt.ylabel('Count')
-    # plt.title(f'# samples that KNN and KNNN disagree on {nn_nnn_diff.sum() / nn_nnn_diff.shape[0] * 100:.2f}% ({nn_nnn_diff.sum()}/{nn_nnn_diff.shape[0]}')
-    # plt.savefig('tmp_diff.png')
-
-    # # plot confusion matrix
-    # plt.clf()
-    # sample_that_knn_is_correct = (knn_res[:,1] > 0.5) & (gt_test_s == 1)
-    # sample_that_knnn_is_correct = (knnn_res[:,1] > 0.5) & (gt_test_s == 1)
-
-    # num_of_sample_that_both_are_correct = (sample_that_knn_is_correct & sample_that_knnn_is_correct).sum()
-    # num_of_sample_that_both_are_incorrect = (~sample_that_knn_is_correct & ~sample_that_knnn_is_correct).sum()
-    # num_of_sample_that_only_knn_is_correct = (sample_that_knn_is_correct & ~sample_that_knnn_is_correct).sum()
-    # num_of_sample_that_only_knnn_is_correct = (~sample_that_knn_is_correct & sample_that_knnn_is_correct).sum()
-    # # bar plot
-    # sns.barplot(x=['only KNN', 'only KNNN', 'both correct', 'both incorrect'], y=[num_of_sample_that_only_knn_is_correct, num_of_sample_that_only_knnn_is_correct, num_of_sample_that_both_are_correct, num_of_sample_that_both_are_incorrect])
-    # plt.savefig('tmp_confusion.png')
-    
-
     # document results
     results_dict = {
         "dataset": 'inria_soda_covertype',

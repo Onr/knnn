@@ -56,16 +56,19 @@ class KNNN_class(KNNN):
         knnn_results_by_class = np.stack(knnn_results_by_class, axis=1)
 
         # convert the anomaly score to a Classification score
-        knnn_results_by_class /= np.expand_dims(knnn_results_by_class.sum(1), 1)
-        knnn_results_by_class = 1 - knnn_results_by_class 
-        knnn_results_by_class /= np.expand_dims(knnn_results_by_class.sum(1), 1)
-        if return_nearest_neigbours_results:
-            knn_results_by_class /= np.expand_dims(knn_results_by_class.sum(1), 1)
-            knn_results_by_class = knn_results_by_class 
-            knn_results_by_class /= np.expand_dims(knn_results_by_class.sum(1), 1)
+        knnn_results_by_class_bin = np.zeros_like(knnn_results_by_class)
+        for row_ind in range(knnn_results_by_class.shape[0]):
+            min_inds = np.where(knnn_results_by_class[row_ind] == np.min(knnn_results_by_class[row_ind]))[0]
+            knnn_results_by_class_bin[row_ind, min_inds] = 1 / min_inds.__len__()
 
         if return_nearest_neigbours_results:
-            return knnn_results_by_class, knn_results_by_class
-        return knnn_results_by_class
+            knn_results_by_class_bin = np.zeros_like(knn_results_by_class)
+            for row_ind in range(knn_results_by_class.shape[0]):
+                min_inds = np.where(knn_results_by_class[row_ind] == np.min(knn_results_by_class[row_ind]))[0]
+                knn_results_by_class_bin[row_ind, min_inds] = 1 / min_inds.__len__()
+
+        if return_nearest_neigbours_results:
+            return knnn_results_by_class, knn_results_by_class, knnn_results_by_class_bin, knn_results_by_class_bin
+        return knnn_results_by_class, knnn_results_by_class_bin
 
     

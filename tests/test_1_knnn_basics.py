@@ -44,11 +44,15 @@ def test_knnn_classification_return_shape():
     }
     knnn_class = KNNN_class(number_of_classes=num_of_classes, **knnn_configs)
     knnn_class.fit(np.random.rand(100, 11), gt=np.random.randint(0, num_of_classes, 100))
-    res_knnn, res_knn = knnn_class(np.random.rand(num_of_test_samples, 11), return_nearest_neigbours_results=True)
+    res_knnn, res_knn, knnn_results_by_class_bin, knn_results_by_class_bin = knnn_class(np.random.rand(num_of_test_samples, 11), return_nearest_neigbours_results=True)
 
-    assert res_knnn.shape == (
+    assert knnn_results_by_class_bin.shape == (
+        num_of_test_samples, num_of_classes), "KNNN returned wrong shape"
+    assert knn_results_by_class_bin.shape == (
         num_of_test_samples, num_of_classes), "KNNN returned wrong shape"
     assert res_knn.shape == (
         num_of_test_samples, num_of_classes), "KNN returned wrong shape"
+    assert res_knnn.shape == (
+        num_of_test_samples, num_of_classes), "KNNN returned wrong shape"
 
 
