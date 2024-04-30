@@ -52,3 +52,14 @@ To run the tests, run:
 ```bash
 pytest
 ```
+
+# Cite
+```bib
+@inproceedings{nizan2024k,
+  title={k-NNN: Nearest Neighbors of Neighbors for Anomaly Detection},
+  author={Nizan, Ori and Tal, Ayellet},
+  booktitle={Proceedings of the IEEE/CVF Winter Conference on Applications of Computer Vision},
+  pages={1005--1014},
+  year={2024}
+}
+```
