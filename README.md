@@ -1,5 +1,5 @@
 # knnn
-K-Nearest Neighbors of Neighbors
+K-Nearest Neighbors of Neighbors - for Anomaly Detection 
 ```bash 
 pip install knnn
 ```
