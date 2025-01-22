@@ -3,6 +3,19 @@ K-Nearest Neighbors of Neighbors
 ```bash 
 pip install knnn
 ```
+<div style="display: flex; justify-content: center; align-items: center; gap: 20px;">
+
+  <div style="text-align: center;">
+    <img src="knn_teaser.png" alt="k-NN" title="k-NN" width="200">
+    <p>k-NN</p>
+  </div>
+
+  <div style="text-align: center;">
+    <img src="knnn_teaser.png" alt="k-NNN" title="k-NNN" width="200">
+    <p>k-NNN</p>
+  </div>
+
+</div>
 
 # Description
 This package provides a simple implementation of the K-Nearest Neighbors of Neighbors algorithm. The algorithm is a simple extension of the K-Nearest Neighbors algorithm, which is used for anomaly detection. The algorithm is based on the idea that the neighbors of the neighbors of a point gives more information than its neighbors. The algorithm can be used to improve the accuracy of the KNN algorithm.
