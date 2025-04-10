@@ -31,7 +31,7 @@ x_normal = np.random.rand(100, 2)
 x_test = np.random.rand(20, 2) + 1
 
 # Create a KNNN object
-knnn = KNNN(num_neighbors=3, num_neighbors_of_neighbors=25)
+knnn = KNNN(number_of_neighbors=3, num_neighbors_of_neighbors=25)
 # Fit the model
 knnn.fit(x_normal)
 # Predict the labels of the test data
