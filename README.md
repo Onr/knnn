@@ -27,8 +27,8 @@ from knnn import KNNN
 import numpy as np
 
 # Random data
-x_normal = np.random.rand(100, 2)
-x_test = np.random.rand(20, 2) + 1
+x_normal = np.random.rand(100, 5)
+x_test = np.random.rand(20, 5) + 1
 
 # Create a KNNN object
 knnn = KNNN(number_of_neighbors=3, number_of_neighbors_of_neighbors=25)
