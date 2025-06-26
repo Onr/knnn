@@ -2,7 +2,6 @@ from pathlib import Path
 import logging
 from typing import List, Tuple, Union, Optional
 
-from PIL import Image
 import numpy as np
 from sklearn.datasets import make_moons, make_circles, make_swiss_roll, make_blobs
 
@@ -120,6 +119,8 @@ def draw_to_points(img_path: str, num_of_points_to_sample: int):
     Returns:
         _type_: _description_
     """
+    from PIL import Image
+
     # load the image 
     img = Image.open(img_path)
     # convert to grayscale
