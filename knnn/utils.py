@@ -3,7 +3,6 @@ import logging
 from typing import List, Tuple, Union, Optional
 
 import numpy as np
-from sklearn.datasets import make_moons, make_circles, make_swiss_roll, make_blobs
 
 synthetic_dataset_types = ['moons', 'circles', 'swiss_roll', 'blobs']
 def create_samples(normal_num_of_samples: int, 
@@ -25,6 +24,8 @@ def create_samples(normal_num_of_samples: int,
     Returns:
         xn_train_s (np.array), xn_test_s (np.array), xa_test_s (np.array): xn_train_s normal train samples, xn_test_s normal test samples, xa_test_s anomalies test samples 
     """
+    from sklearn.datasets import make_moons, make_circles, make_swiss_roll, make_blobs
+
     logging.info(f'creating synthetic data with {normal_num_of_samples} normal sampels, noises={noises}, seed={seed}, data_types={data_types}')
     np.random.seed(seed)
     xn_s = []
