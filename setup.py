@@ -2,7 +2,7 @@ from setuptools import setup, find_packages
 
 setup(
     name="knnn",
-    version="0.0.7",
+    version="0.0.9",
     author="Ori Nizan",
     author_email="restin3@gmail.com",
     description="An implementation of KNNN algorithm",
@@ -15,7 +15,7 @@ setup(
         "License :: OSI Approved :: MIT License",
         "Operating System :: OS Independent",
     ],
-    python_requires=">=3.7, <=3.10",
+    python_requires=">=3.7",
     install_requires=[
         'numpy',
         'scipy',
