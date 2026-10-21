@@ -1,4 +1,6 @@
 import logging
+import os
+import pytest
 from pathlib import Path
 from tqdm.auto import tqdm
 
@@ -11,11 +13,15 @@ from tests.utils import document_results, plot_and_save_synthetic
 from knnn import KNNN, KNNN_class  
 
 
+pytestmark = [pytest.mark.benchmark, pytest.mark.external]
+
 SEED = 42
 
-MAIN_DATASET_PATH = Path('/home/onrh/projects/anomaly/new_patch_core/patchcore-inspection/test/datasets')
+MAIN_DATASET_PATH = Path(os.environ.get('KNNN_ADB_DATASET_PATH', '/home/onrh/projects/anomaly/new_patch_core/patchcore-inspection/test/datasets'))
 def run_test_on_ADB_dataset(dataset_type, dataset_name, knnn_configs=None): # TODO tmp remove next ->, test_sample_num = 150):
     dataset_paths = list((MAIN_DATASET_PATH / dataset_type).glob(f'*{dataset_name}*'))
+    if not dataset_paths:
+        pytest.skip(f'ADB dataset not found: {dataset_type}/{dataset_name}')
     for dataset_path in dataset_paths:
         dataset = np.load(dataset_path)
         np.random.seed(SEED)

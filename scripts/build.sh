@@ -1,2 +1,4 @@
 #!/bin/bash
-python3 -m build
+set -euo pipefail
+cd -- "$(dirname -- "$0")/.."
+python3 -m build "$@"

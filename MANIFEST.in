@@ -1,4 +1,7 @@
 graft knnn
 include pyproject.toml
 include setup.py
+include CHANGELOG.md
+include BENCHMARKS.md
+include scripts/benchmark_batches.py
 global-exclude *.py[cod]

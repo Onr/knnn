@@ -1,14 +1,18 @@
-import time
-import logging
+from numbers import Integral
 
-from tqdm.auto import tqdm
 import numpy as np
-from scipy.cluster.hierarchy import dendrogram, linkage
-from scipy.spatial.distance import squareform
-from scipy.spatial import distance
-from scipy.cluster.hierarchy import fcluster
+from sklearn.base import BaseEstimator
+from sklearn.neighbors import NearestNeighbors
+from sklearn.utils.validation import check_array, check_is_fitted
 
-import faiss
+try:
+    from sklearn.utils.validation import validate_data
+except ImportError:  # sklearn < 1.6
+    def validate_data(estimator, *args, **kwargs):
+        return estimator._validate_data(*args, **kwargs)
+
+
+EPSILON = 1e-10
 
 
 def compute_correlation_matrix(data):
@@ -19,16 +23,24 @@ def compute_correlation_matrix(data):
                  and m is the number of features.
     :return: The correlation matrix of size [m, m].
     """
-    # Standardize each feature (column) to have mean 0 and variance 1
-    standardized_data = (data - np.mean(data, axis=0)) / np.std(data, axis=0, ddof=1)
+    data = check_array(data, dtype=np.float64, ensure_min_samples=2)
+    centered = data - data.mean(axis=0)
+    scales = np.linalg.norm(centered, axis=0)
+    standardized_data = np.divide(
+        centered, scales, out=np.zeros_like(centered), where=scales != 0
+    )
 
     # Compute the correlation matrix
-    correlation_matrix = np.dot(standardized_data.T, standardized_data) / (data.shape[0] - 1)
+    correlation_matrix = np.nan_to_num(standardized_data.T @ standardized_data)
+    correlation_matrix = np.clip(correlation_matrix, -1, 1)
 
     return correlation_matrix
 
     
 def hierarchical_clustering(correlation_matrix, do_plot=False):
+    from scipy.cluster.hierarchy import linkage
+    from scipy.spatial.distance import squareform
+
     # Transform the correlation matrix to a distance matrix
     distance_matrix = 1 - np.abs(correlation_matrix)
 
@@ -50,6 +62,8 @@ def equal_size_clustering(Z, m, target_size):
     :return: Array indicating cluster membership for each feature.
     """
     
+    from scipy.cluster.hierarchy import fcluster
+
     if m % target_size != 0:
         raise ValueError("Number of features target_size must be a divisor of number of features m")
 
@@ -111,22 +125,41 @@ def equal_size_clustering(Z, m, target_size):
 
 def get_features_clusters(data, target_size):
     """
-    Performs hierarchical clustering on features and returns the clusters.
+    Group correlated features into blocks of at most target_size entries.
     
     :param data: Data matrix with features in columns.
     :param target_size: Desired number of features in each cluster.
     :return: Array indicating cluster membership for each feature.
     """
-    if data.shape[1] < target_size:
-        raise ValueError("Number of target_size must be less than or equale the number of features in the data")
-    if data.shape[1] == target_size or target_size <= 1:
-        return np.zeros(data.shape[1])
-    correlation_matrix = compute_correlation_matrix(data)
-    Z = hierarchical_clustering(np.abs(correlation_matrix))
-    Z = np.where(Z < 0, 0, Z)
-    m = data.shape[1]
-    clusters = equal_size_clustering(Z, m, target_size)
+    order = reorder_features_by_correlation(data, target_size)
+    clusters = np.empty(data.shape[1], dtype=int)
+    clusters[order] = np.arange(data.shape[1]) // target_size
     return clusters
+
+
+def reorder_features_by_correlation(data, L):
+    """Return a feature permutation using the greedy rule in Section 3.
+
+    Within a block, choose the remaining feature most correlated (in absolute
+    value) with the preceding two entries. Start each new block with the least
+    correlated remaining feature. Constant features have zero correlation.
+    """
+    if not isinstance(L, Integral) or isinstance(L, bool) or L < 1:
+        raise ValueError("L must be a positive integer")
+    correlations = np.abs(compute_correlation_matrix(data))
+    constant = np.flatnonzero(np.ptp(data, axis=0) == 0)
+    order = np.flatnonzero(np.ptp(data, axis=0) != 0)
+    for i in range(1, len(order)):
+        block_start = (i // L) * L
+        start = max(block_start, i - 2) if i % L else max(0, i - 2)
+        remaining = order[i:]
+        values = correlations[np.ix_(order[start:i], remaining)].mean(axis=0)
+        offset = np.argmin(values) if i % L == 0 else np.argmax(values)
+        selected = i + offset
+        order[i], order[selected] = order[selected], order[i]
+    # Constant columns carry no grouping information and should not split
+    # correlated pairs simply by winning a zero-correlation boundary tie.
+    return np.concatenate([order, constant])
 
 
 def get_features_sets(data, clusters):
@@ -138,10 +171,13 @@ def get_features_sets(data, clusters):
 
 def normalize_vectors(vectors):
     norms = np.linalg.norm(vectors, axis=1, keepdims=True)
-    return vectors / norms
+    return np.divide(vectors, norms, out=np.zeros_like(vectors, dtype=float), where=norms != 0)
 
 
 def get_features_knn_faiss(data_1, data_2=None, dist_func='cosine', k=25, do_gpu=False, index=None, return_index=False, return_centers=False):
+    # Retained for callers of the legacy helper; the estimator uses sklearn.
+    import faiss
+
     # get knn from data_1 vecs to data_2 vecs the return index are of data_2 vecs
     data_1 = data_1.astype('float32')
     if data_2 is not None:
@@ -199,7 +235,7 @@ def compute_invers_covariances_and_centers(embedding_matrix, indices_matrix, ret
         eigenvalues = np.zeros((n, eig_vec_size))
         eigenvectors = np.zeros((n, eig_vec_size, m))
     
-    for i in tqdm(range(n), desc='Computing eigenvectors and eigenvalues',leave=False):
+    for i in range(n):
         # Select the embedding of the sample and its nearest neighbors
         neighbors = indices_matrix[i]
         sub_matrix = embedding_matrix[neighbors, :]
@@ -208,7 +244,7 @@ def compute_invers_covariances_and_centers(embedding_matrix, indices_matrix, ret
         centers[i] = sub_matrix[0, :] if not use_means_as_return__centers else np.mean(sub_matrix, axis=0) 
         
         # Compute the covariance matrix for the sample and its neighbors
-        cov_matrix = np.cov(sub_matrix, rowvar=False)
+        cov_matrix = np.atleast_2d(np.cov(sub_matrix, rowvar=False))
 
         # Step 3: Calculate the inverse of the covariance matrix
         try:
@@ -238,93 +274,168 @@ def compute_invers_covariances_and_centers(embedding_matrix, indices_matrix, ret
         return centers, inverse_covariance_matries
 
         
-class KNNN:
-    def __init__(self, number_of_neighbors=3, number_of_neighbors_of_neighbors=25, set_size=5, distance_function='cosine') -> None:
+def calc_eigen_for_set(data, indices, batch_size=256):
+    """Compute local covariance eigenvectors and standard deviations in batches.
+
+    The neighborhood includes the training point itself. Keeping covariance
+    matrices three dimensional also handles a final block of just one feature.
+    """
+    n, dimensions = data.shape
+    eigen_values = np.empty((n, dimensions))
+    eigen_vectors = np.empty((n, dimensions, dimensions))
+    for start in range(0, n, batch_size):
+        stop = min(start + batch_size, n)
+        neighbors = data[indices[start:stop]]
+        centered = neighbors - neighbors.mean(axis=1, keepdims=True)
+        covariance = centered.transpose(0, 2, 1) @ centered
+        covariance /= indices.shape[1] - 1
+        values, vectors = np.linalg.eigh(covariance)
+        eigen_values[start:stop] = np.sqrt(np.maximum(values, 0))
+        eigen_vectors[start:stop] = vectors
+    return eigen_values, eigen_vectors
+
+
+class KNNN(BaseEstimator):
+    """Nearest neighbors of neighbors anomaly scores (larger is more anomalous).
+
+    ``set_size`` is the maximum feature block size; -1 uses all features.
+    ``p=1`` implements the paper's absolute projections divided by local
+    standard deviations. Scores are averaged over neighbors and dimensions.
+    The default ``p=2`` uses RMS Mahalanobis distances in each block, with
+    Euclidean distances for singular covariances as in the original estimator.
+    ``batch_size`` bounds the temporary arrays used in fitting and inference.
+
+    For compatibility, ``predict`` and ``__call__`` return continuous anomaly
+    scores. ``score_samples`` follows sklearn's opposite sign convention.
+    """
+
+    def __init__(self, number_of_neighbors=3, number_of_neighbors_of_neighbors=25,
+                 set_size=5, distance_function='cosine', p=2, batch_size=256):
         self.number_of_neighbors = number_of_neighbors
         self.number_of_neighbors_of_neighbors = number_of_neighbors_of_neighbors
         self.set_size = set_size
         self.distance_function = distance_function
-        self.fitted = False
-        self.droped_features_with_zero_std = None 
-        self.values_of_droped_features_with_zero_std = None
-        
-    def fit(self, data):
-        logging.info('Fitting knnn model')
-        start_time = time.time()
-        self.droped_features_with_zero_std = np.where(np.std(data, axis=0) == 0)[0]
-        self.values_of_droped_features_with_zero_std = data[:, self.droped_features_with_zero_std][0]
-        self.data = data if self.droped_features_with_zero_std is None else np.delete(data, self.droped_features_with_zero_std, axis=1)
-        # devide the data to sets
-        # add zeros if data is not divisable by set_size
-        if self.data.shape[1] % self.set_size != 0:
-            self.data = self.data[:, :-(self.data.shape[1] % self.set_size)] # TODO test
-            # self.num_of_zeros_features_to_add = self.set_size - self.data.shape[1] % self.set_size
-            # self.data = np.concatenate([self.data, 1e-5*np.random.randn(self.data.shape[0], self.num_of_zeros_features_to_add)], axis=1)
-        self.features_clusters = get_features_clusters(self.data, self.set_size)
-        self.feature_sets = get_features_sets(self.data, self.features_clusters)
+        self.p = p
+        self.batch_size = batch_size
 
-        self.hole_data_distances, self.hole_data_indesies, hole_data_centers, self.hole_data_index = get_features_knn_faiss(self.data, self.data, k=self.number_of_neighbors_of_neighbors, do_gpu=False, dist_func=self.distance_function, return_centers=True, return_index=True)
+    @property
+    def data(self):
+        return self.data_
 
-        self.centers_groups, self.inverse_covariance_matries_groups = [], []
-        for feature_set in tqdm(self.feature_sets, desc='Computing eigenvectors and eigenvalues for each set'):
-            centers, inv_mat = compute_invers_covariances_and_centers(feature_set, self.hole_data_indesies) # computer eigens for each set based on the hole data knn
-            self.centers_groups.append(centers)
-            self.inverse_covariance_matries_groups.append(inv_mat)
-        self.centers_groups = np.stack(self.centers_groups, axis=1) # [sample, group, center_vec]
-        self.inverse_covariance_matries_groups = np.stack(self.inverse_covariance_matries_groups, axis=1) # [sample, group, set_size, set_size]
+    @property
+    def features_clusters(self):
+        return self.features_clusters_
 
-        self.fitted = True
-        logging.info(f'Fitting the knnn model took {time.time() - start_time:.2f} seconds')
+    @property
+    def feature_sets(self):
+        return self.feature_sets_
 
-    def __call__(self, test_data, return_nearest_neigbours_results=False) -> np.ndarray:
-        assert self.fitted, 'The model is not fitted yet'
-        logging.info('Calculating knnn score')
-        start_time = time.time()
-        test_same_values_train = None
-        if self.droped_features_with_zero_std is not None:
-            test_data_of_droped_features_with_zero_std = test_data[:, self.droped_features_with_zero_std]
-            # check there isnt feature that wasnt in the train data
-            test_same_values_train = (test_data_of_droped_features_with_zero_std != self.values_of_droped_features_with_zero_std).sum(1)
-            if not np.all(test_data_of_droped_features_with_zero_std == self.values_of_droped_features_with_zero_std):
-                logging.warning('There are features in the test data that wasnt in the train data')
-            test_data = np.delete(test_data, self.droped_features_with_zero_std, axis=1)
+    @property
+    def fitted(self):
+        return getattr(self, 'fitted_', False)
 
-        if test_data.shape[1] % self.set_size != 0:
-            test_data = test_data[:, :-(test_data.shape[1] % self.set_size)] # TODO test
-            # test_data = np.concatenate([test_data, 1e-5*np.random.randn(test_data.shape[0], self.num_of_zeros_features_to_add)], axis=1)
+    def fit(self, data, y=None):
+        data = validate_data(self, data, dtype=np.float64,
+                             ensure_min_samples=2, copy=True)
+        for name in ('number_of_neighbors', 'number_of_neighbors_of_neighbors',
+                     'batch_size', 'set_size'):
+            value = getattr(self, name)
+            if (not isinstance(value, Integral) or isinstance(value, bool)
+                    or (value < 1 and not (name == 'set_size' and value == -1))):
+                raise ValueError(f"{name} must be a positive integer"
+                                 + (" or -1" if name == 'set_size' else ""))
+        if self.number_of_neighbors_of_neighbors < 2:
+            raise ValueError("number_of_neighbors_of_neighbors must be at least 2")
+        if self.distance_function not in ('cosine', 'euclidean'):
+            raise ValueError("distance_function must be 'cosine' or 'euclidean'")
+        if self.p not in (1, 2):
+            raise ValueError("p must be 1 or 2")
 
-        # get knn indeies for each test data point to the hole data
-        hole_test_data_distances, hole_test_data_indesies = get_features_knn_faiss(data_1=test_data, index=self.hole_data_index, k=self.number_of_neighbors, do_gpu=False, dist_func=self.distance_function, return_centers=False)
+        self.n_features_in_ = data.shape[1]
+        self.data_ = data
+        self.n_neighbors_ = min(self.number_of_neighbors, len(data))
+        self.n_eigen_neighbors_ = min(self.number_of_neighbors_of_neighbors, len(data))
+        self.set_size_ = (self.n_features_in_ if self.set_size == -1
+                          else min(self.set_size, self.n_features_in_))
+        self.neighbors_ = NearestNeighbors(metric=self.distance_function).fit(data)
+        self.features_clusters_ = get_features_clusters(data, self.set_size_)
+        self.feature_indices_ = [np.flatnonzero(self.features_clusters_ == group)
+                                 for group in np.unique(self.features_clusters_)]
+        self.feature_sets_ = [data[:, features] for features in self.feature_indices_]
+        self.constant_features_ = np.flatnonzero(np.ptp(data, axis=0) == 0)
+        self.constant_values_ = data[0, self.constant_features_].copy()
+        self.eigen_values_groups_ = []
+        self.eigen_vectors_groups_ = []
+        # Query neighborhoods in chunks too, rather than allocating N x N
+        # cosine distances for a large training set.
+        indices = np.empty((len(data), self.n_eigen_neighbors_), dtype=int)
+        for start in range(0, len(data), self.batch_size):
+            stop = start + self.batch_size
+            indices[start:stop] = self.neighbors_.kneighbors(
+                data[start:stop], n_neighbors=self.n_eigen_neighbors_,
+                return_distance=False)
+        for feature_set in self.feature_sets_:
+            values, vectors = calc_eigen_for_set(feature_set, indices,
+                                                 self.batch_size)
+            self.eigen_values_groups_.append(values)
+            self.eigen_vectors_groups_.append(vectors)
+        self.fitted_ = True
+        return self
 
-        # devide the test data into sets
-        test_data_sets = get_features_sets(test_data, self.features_clusters)
-        test_data_sets = np.stack(test_data_sets, axis=1) # [sample, group, data]
+    def __sklearn_is_fitted__(self):
+        return getattr(self, 'fitted_', False)
 
-        # for each test data point get the mahalanobis distace to each set
-        results_matrix = np.zeros((test_data.shape[0], self.number_of_neighbors, test_data_sets.shape[1]))
-        for test_ind in tqdm(range(test_data.shape[0]), desc='Computing mahalanobis distance for each test sample'):
-            for test_data_neigbour_ind in range(self.number_of_neighbors):
-                original_data_neigbour_ind = hole_test_data_indesies[test_ind, test_data_neigbour_ind]
-                for group_ind in range(test_data_sets.shape[1]):
-                    # Compute the difference between the test sample and the center of the set
-                    mahalanobis_distance = distance.mahalanobis(test_data_sets[test_ind, group_ind], self.centers_groups[original_data_neigbour_ind, group_ind], self.inverse_covariance_matries_groups[original_data_neigbour_ind, group_ind])
-                    results_matrix[test_ind, test_data_neigbour_ind, group_ind] = mahalanobis_distance
-
-        # combine the results of the sete and the nighebours
-        test_results = results_matrix.copy()
-        # opt 1 mean:
-        # mean on the sets
-        test_results = np.nanmean(test_results, axis=1)
-        # mean on the neigbours
-        test_results = np.nanmean(test_results, axis=1)
-
-        if test_same_values_train is not None:
-            test_results[test_same_values_train > 0] = np.finfo(np.float64).max
-        
-        logging.info(f'Calculating knnn score took {time.time() - start_time:.2f} seconds')
+    def __call__(self, test_data, return_nearest_neigbours_results=False):
+        check_is_fitted(self)
+        test_data = validate_data(self, test_data, dtype=np.float64, reset=False)
+        scores = np.zeros(len(test_data))
         if return_nearest_neigbours_results:
-            return test_results, {'knn_indeises': hole_test_data_indesies, 'knn_distance': hole_test_data_distances}
-        return test_results
+            all_distances = np.empty((len(test_data), self.n_neighbors_))
+            all_indices = np.empty((len(test_data), self.n_neighbors_), dtype=int)
+        for start in range(0, len(test_data), self.batch_size):
+            stop = min(start + self.batch_size, len(test_data))
+            queries = test_data[start:stop]
+            distances, indices = self.neighbors_.kneighbors(
+                queries, n_neighbors=self.n_neighbors_)
+            for features, feature_set, values, vectors in zip(
+                    self.feature_indices_, self.feature_sets_, self.eigen_values_groups_,
+                    self.eigen_vectors_groups_):
+                differences = queries[:, None, features] - feature_set[indices]
+                projections = np.einsum('nkd,nkdl->nkl', differences,
+                                        vectors[indices], optimize=True)
+                scales = values[indices] + EPSILON
+                if self.p == 2:
+                    # The original estimator used an identity inverse when
+                    # covariance inversion failed. Detect numerical singularity
+                    # from the eigenvalues to avoid unstable inverse matrices.
+                    local_values = values[indices]
+                    singular = (local_values[..., 0] ** 2 <= np.finfo(float).eps
+                                * len(features) * local_values[..., -1] ** 2)
+                    scales = np.where(singular[..., None], 1.0, scales)
+                standardized = np.abs(projections) / scales
+                if self.p == 1:
+                    block_scores = standardized.mean(axis=2)
+                else:
+                    block_scores = np.sqrt(np.mean(standardized ** 2, axis=2))
+                scores[start:stop] += (block_scores.mean(axis=1)
+                                       * len(features) / self.n_features_in_)
+            changed_constants = np.any(
+                queries[:, self.constant_features_] != self.constant_values_, axis=1)
+            scores[start:stop][changed_constants] = np.finfo(np.float64).max
+            if return_nearest_neigbours_results:
+                # FAISS returned squared Euclidean distances in the old API.
+                all_distances[start:stop] = (distances ** 2
+                                             if self.distance_function == 'euclidean'
+                                             else distances)
+                all_indices[start:stop] = indices
+        if return_nearest_neigbours_results:
+            return scores, {'knn_indeises': all_indices, 'knn_distance': all_distances}
+        return scores
 
     def predict(self, test_data):
+        """Return continuous anomaly scores; larger values are more anomalous."""
         return self(test_data)
+
+    def score_samples(self, X):
+        """Return normality scores, with larger values indicating normal samples."""
+        return -self(X)

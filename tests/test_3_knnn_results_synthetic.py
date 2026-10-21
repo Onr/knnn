@@ -1,4 +1,5 @@
 import logging
+import pytest
 from pathlib import Path
 
 import numpy as np
@@ -9,6 +10,8 @@ from datasets import load_dataset
 
 from knnn import KNNN, KNNN_class, create_samples
 from tests.utils import document_results, plot_and_save_synthetic
+
+pytestmark = pytest.mark.benchmark
 
 SEED = 42
 

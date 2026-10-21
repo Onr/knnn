@@ -1,4 +1,5 @@
 import logging
+import pytest
 from pathlib import Path
 
 import numpy as np
@@ -8,6 +9,8 @@ from datasets import load_dataset
 
 from knnn import KNNN, KNNN_class
 from tests.utils import document_results, plot_and_save_synthetic
+
+pytestmark = pytest.mark.benchmark
 
 SEED = 42
 
@@ -33,7 +36,7 @@ def test_knn_vs_knnn_on_brest_cancer_data():
     knnn = KNNN(**knnn_configs)
     knnn.fit(data_train)
     res, res_knn = knnn(data_test, return_nearest_neigbours_results=True)
-    knn_res = res_knn['knn_distance'].mean(1)
+    knn_res = -res_knn['knn_distance'].mean(1)
     knnn_res = -res
     # compere scores
     roc_auc_score_knn = roc_auc_score(gt_test_s, knn_res)
@@ -189,6 +192,7 @@ def test_knn_vs_knnn_on_wine_data():
 
 # huggingsface datasets
 
+@pytest.mark.external
 def test_knn_vs_knnn_on_inria_bioresponse(): # https://huggingface.co/datasets/inria-soda/tabular-benchmark
     test_sample_num = 500
     dataset_bio = load_dataset("inria-soda/tabular-benchmark", data_files="clf_num/Bioresponse.csv")['train'].to_pandas()
@@ -248,6 +252,7 @@ def test_knn_vs_knnn_on_inria_bioresponse(): # https://huggingface.co/datasets/i
     assert average_precision_score_knnn > average_precision_score_knn, f"KNNN is not better than KNN by AP metric on bioresponse dataset (knnn={average_precision_score_knnn}, knn={average_precision_score_knn})"
  
  
+@pytest.mark.external
 def test_knn_vs_knnn_on_inria_soda_eye(): # https://huggingface.co/datasets/inria-soda/tabular-benchmark # https://www.openml.org/search?type=data&sort=runs&id=1044
     # dataset_eye = load_dataset("inria-soda/tabular-benchmark", data_files="clf_cat/eye_movements.csv")['train'].to_pandas()
     # remove irrelevant columns
@@ -309,6 +314,7 @@ def test_knn_vs_knnn_on_inria_soda_eye(): # https://huggingface.co/datasets/inri
     assert average_precision_score_knnn > average_precision_score_knn, f"KNNN is not better than KNN by AP metric on eye movements dataset (knnn={average_precision_score_knnn}, knn={average_precision_score_knn})"
 
     
+@pytest.mark.external
 def test_knn_vs_knnn_on_inria_soda_covertype(): # https://huggingface.co/datasets/inria-soda/tabular-benchmark 
     dataset_covertype = load_dataset("inria-soda/tabular-benchmark", data_files="clf_cat/covertype.csv")['train'].to_pandas()
     # remove irrelevant columns
